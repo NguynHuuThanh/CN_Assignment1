@@ -1,7 +1,6 @@
 import java.io.*;
 import java.net.*;
 import java.util.*;
-import java.nio.charset.StandardCharsets;
 
 public class MyClient{
   public static void main(String[] args){
@@ -28,7 +27,7 @@ public class MyClient{
       System.out.println(connectSuccess);
       
       DataOutputStream output = new DataOutputStream(socket.getOutputStream());
-      String connectMessage = "Client with portNumber " + clientPort + " connect!\n";
+      String connectMessage = "Client with portNumber " + clientPort + " connected!\n";
       //output.write(connectMessage.getBytes(StandardCharsets.UTF_8));
       output.writeUTF(connectMessage);
 
@@ -37,7 +36,9 @@ public class MyClient{
         output.writeUTF("ALIVE");
       }
 
-    } 
+    } catch (java.net.SocketException e) {
+      System.out.println("Client disconnected!");
+    }
     catch(Exception e){
       System.out.println(e);
     }
