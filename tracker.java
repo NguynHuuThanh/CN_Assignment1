@@ -42,24 +42,11 @@ public class MyServer {
             String encodedInfo = encoder.toString();
             
             byte[] hash = MetaInfo.calculatePieceHash(encodedInfo.getBytes(StandardCharsets.UTF_8));
-            System.out.println(bytesToHex(hash));
             return URLEncoder.encode(new String(hash, StandardCharsets.ISO_8859_1), StandardCharsets.UTF_8.toString());
         } catch (Exception e) {
             e.printStackTrace();
             return null;
         }
-    }
-
-    public static String bytesToHex(byte[] bytes) {
-        StringBuilder hexString = new StringBuilder();
-        for (byte b : bytes) {
-            String hex = Integer.toHexString(0xff & b); // Mask the sign bit
-            if (hex.length() == 1) {
-                hexString.append('0'); // Ensure two-character formatting
-            }
-            hexString.append(hex);
-        }
-        return hexString.toString();
     }
 
     public static void createTorrentFile(File source, String clientPath, int clientPort) throws IOException, NoSuchAlgorithmException {
@@ -215,7 +202,6 @@ class ClientHandler implements Runnable {
                 }
             }
             
-            // Close resources
             if (!socket.isClosed()) {
                 socket.close();
             }
