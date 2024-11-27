@@ -5,6 +5,8 @@ import java.util.*;
 public class MyClient{
   public static int clientPort;
   public static void main(String[] args){
+      
+
     Scanner objRead = new Scanner(System.in);
     String serverAddress;
     int serverPort;
@@ -95,92 +97,104 @@ class Menu implements Runnable {
                 break;
 
                 case 2:
-                System.out.println("Enter the Name of the file to download: ");
-                String infoHashDownload = scanner.nextLine();
-                try {
-                    dis.writeUTF("Finding file:" + infoHashDownload);
-                    String tmp = "";
-                    try {
-                        tmp = input.readUTF();
-                    } catch (Exception e) {
-                        System.out.println(e);
-                    }
+              PrintStream originalOut = System.out; // Save the original System.out
+              PrintStream originalErr = System.err; // Save the original System.err
+              try {
+                  
 
-                    if (tmp.contains("File not found on the server.")) {
+                  // Start logging
+                  System.out.println("Logging started at: " + new Date());
+                  System.out.println("Enter the Name of the file to download: ");
+
+                  // Redirect System.out and System.err to a log file
+                  FileOutputStream fileOutputStream = new FileOutputStream(Integer.toString(MyClient.clientPort) + ".log", true);
+                  PrintStream logStream = new PrintStream(fileOutputStream);
+                  System.setOut(logStream);
+                  System.setErr(logStream);
+
+                  String infoHashDownload = scanner.nextLine();
+                  dis.writeUTF("Finding file:" + infoHashDownload);
+                  String tmp = "";
+
+                  try {
+                      tmp = input.readUTF();
+                  } catch (Exception e) {
+                      System.out.println("Error reading response: " + e.getMessage());
+                  }
+
+                  if (tmp.contains("File not found on the server.")) {
                       System.out.println("File not found on the server.");
                       break;
                   }
-                  int num_piece = Integer.parseInt(tmp);
-                    // Define the buffer to store all the pieces
-                    int totalPieces = num_piece; // Adjust based on your expected number of pieces
-                    byte[][] buffer = new byte[num_piece][512000]; // Each piece is a byte array
-                    boolean check = false;
-            
-                    while (true) {
-                        try {
-                            tmp = input.readUTF();
-                        } catch (Exception e) {
-                            System.out.println(e);
-                        }
-            
-                        if (tmp.contains("DONE")) {
-                           if (check == true)
-                            System.out.println("All pieces received.");
-                            break;
-                        }
 
-                        //System.out.println("CHECK BUG: " + tmp);
-            
-                        String piece = tmp.split(";")[0];
-                        String peerIP = tmp.split(";")[1];
-                        String peerDir = tmp.split(";")[2];
-                        String infoHash = tmp.split(";")[3];
-                        
-                        //String haha = URLDecoder.decode(infoHash,StandardCharsets.ISO_8859_1.toString());
-                        //byte[] hihi = haha.getBytes("ISO-8859-1");
-                        //System.out.println("\n\n\n");
-                        //for (byte b : hihi){
-                        //  System.out.println(b+" ");
-                        //}
-            
-                        if (Integer.valueOf(peerIP.split(":")[1]) == MyClient.clientPort) {
-                            System.out.println("You already have this file!");
-                            check = true;
-                            break;
-                        }
-            
-                        try {
-                            int pieceIndex = Integer.valueOf(piece);
-                            boolean success = downloadPiece(peerIP.split(":")[0],
-                                                            Integer.valueOf(peerIP.split(":")[1]),
-                                                            infoHash, 
-                                                            pieceIndex, 
-                                                            peerDir, 
-                                                            infoHashDownload, 
-                                                            buffer);
-            
-                            if (!success) {
-                                check = true;
-                                System.out.println("Failed to download piece " + pieceIndex);
-                            }
-            
-                        } catch (Exception e) {
-                            check = true;
-                            System.out.println("Error downloading piece " + piece + ": " + e.getMessage());
-                        }
-                    }
-            
-                    // Reassemble the file after all pieces are downloaded
-                    if (check != true) 
-                    {
+                  int num_piece = Integer.parseInt(tmp);
+
+                  // Define the buffer to store all the pieces
+                  byte[][] buffer = new byte[num_piece][512000]; // Each piece is a byte array
+                  boolean check = false;
+
+                  while (true) {
+                      try {
+                          tmp = input.readUTF();
+                      } catch (Exception e) {
+                          System.out.println("Error during communication: " + e.getMessage());
+                      }
+
+                      if (tmp.contains("DONE")) {
+                          if (check) {
+                              System.out.println("All pieces received.");
+                          }
+                          break;
+                      }
+
+                      String piece = tmp.split(";")[0];
+                      String peerIP = tmp.split(";")[1];
+                      String peerDir = tmp.split(";")[2];
+                      String infoHash = tmp.split(";")[3];
+
+                      if (Integer.valueOf(peerIP.split(":")[1]) == MyClient.clientPort) {
+                          System.out.println("You already have this file!");
+                          check = true;
+                          break;
+                      }
+
+                      try {
+                          int pieceIndex = Integer.valueOf(piece);
+                          boolean success = downloadPiece(peerIP.split(":")[0],
+                                                          Integer.valueOf(peerIP.split(":")[1]),
+                                                          infoHash, 
+                                                          pieceIndex, 
+                                                          peerDir, 
+                                                          infoHashDownload, 
+                                                          buffer);
+
+                          if (!success) {
+                              check = true;
+                              System.out.println("Failed to download piece " + pieceIndex);
+                          }
+
+                      } catch (Exception e) {
+                          check = true;
+                          System.out.println("Error downloading piece " + piece + ": " + e.getMessage());
+                      }
+                  }
+
+                  if (!check) {
                       System.out.println("Reassembling the file...");
-                    //reassembleFile(infoHashDownload, infoHashDownload, buffer);}
                       reassembleFile(MyServer.BASE_PATH + Integer.toString(MyClient.clientPort) + "/" + infoHashDownload, buffer);
-                    }
-                } catch (Exception e) {
-                    System.out.println("Error: " + e.getMessage());
-                }
-                break;
+                  }
+              } catch (Exception e) {
+                  System.out.println("Error: " + e.getMessage());
+              } finally {
+                  // Restore the original System.out and System.err
+                  System.setOut(originalOut);
+                  System.setErr(originalErr);
+
+                  // Log restoration
+                  System.out.println("Logging ended. Output restored to console.");
+              }
+              break;
+
             
                 
 
@@ -212,6 +226,7 @@ class Menu implements Runnable {
 
         // Send handshake and piece request
         out.writeUTF("Handshake sent from " + this.socket.getInetAddress() + ":" + this.socket.getLocalPort());
+        System.out.println("Handshake sent from " + this.socket.getInetAddress() + ":" + this.socket.getLocalPort());
         System.out.println(in.readUTF());
         out.writeUTF(downloadDirectory + "/" + nameFile); // File name/path
         out.writeUTF(String.valueOf(pieceIndex));            // Requested piece index
@@ -223,10 +238,11 @@ class Menu implements Runnable {
         int bytesRead, totalBytesRead = 0;
 
         // Download piece into the temporary buffer
+        System.out.println("Downloading piece " + pieceIndex + "!");
         while ((bytesRead = input.read(pieceBuffer, totalBytesRead, pieceBuffer.length - totalBytesRead)) > 0) {
             totalBytesRead += bytesRead;
 
-            System.out.println("Received " + bytesRead + " bytes. Total: " + totalBytesRead + " bytes.");
+            //System.out.println("Received " + bytesRead + " bytes. Total: " + totalBytesRead + " bytes.");
             if (totalBytesRead == pieceBuffer.length) {
                 break; // Stop if the piece is fully read
             }
@@ -250,8 +266,6 @@ class Menu implements Runnable {
         return false; // Failure
     }
 }
-
-
 
 private void reassembleFile(String outputFile, byte[][] buffer_pieces) {
   try {
@@ -304,7 +318,7 @@ class Hankshake implements Runnable {
               while ((bytesRead = fileInputStream.read(buffer)) > 0) {
                 //System.out.println("check sent 3");
                   outputStream.write(buffer, 0, bytesRead); 
-                  System.out.println("Sent " + bytesRead + " bytes for piece " + pieceIndex);
+                  //System.out.println("Sent " + bytesRead + " bytes for piece " + pieceIndex);
 
               }
               //socket.close();

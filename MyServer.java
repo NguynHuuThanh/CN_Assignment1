@@ -143,8 +143,8 @@ public class MyServer {
     
                         int totalPieces = metaInfo.getInfo().getPieces().length / 20;
     
-                        System.out.println("File name: " + file.getName());
-                        System.out.println("Number of pieces: " + totalPieces);
+                        //System.out.println("File name: " + file.getName());
+                        //System.out.println("Number of pieces: " + totalPieces);
     
                         // Add client as having all pieces
                         HashMap<Integer, ArrayList<String>> pieceMap = file_list.get(infoHash);
@@ -153,9 +153,18 @@ public class MyServer {
                                           .computeIfAbsent(infoHash, k -> new HashMap<>());
     
                         for (int i = 0; i < totalPieces; i++) {
-                            pieceMap.computeIfAbsent(i, k -> new ArrayList<>()).add(clientKey);
-                            pieceMap2.computeIfAbsent(i, k -> new ArrayList<>()).add(clientKey);
+                        pieceMap.computeIfAbsent(i, k -> new ArrayList<>());
+                        pieceMap2.computeIfAbsent(i, k -> new ArrayList<>());
+                    
+                        if (!pieceMap.get(i).contains(clientKey)) {
+                            pieceMap.get(i).add(clientKey);
                         }
+                    
+                        if (!pieceMap2.get(i).contains(clientKey)) {
+                            pieceMap2.get(i).add(clientKey);
+                        }
+                    }
+                                        
                     } catch (Exception e) {
                         System.out.println("Error processing file: " + file.getName());
                         e.printStackTrace();
@@ -255,7 +264,7 @@ class ClientHandler implements Runnable {
             String clientPath = MyServer.BASE_PATH + clientPort;
             //MyServer.printFileList();
             //System.out.println(MyServer.PrintListFile());
-            //MyServer.processClientFiles(clientPath, key);
+            MyServer.processClientFiles(clientPath, key);
             while (true) {
                 MyServer.processClientFiles(clientPath, key);
                 String clientMessage = input.readUTF();
@@ -277,17 +286,36 @@ class ClientHandler implements Runnable {
                             
                             HashMap<Integer, ArrayList<String>> pieceMap = MyServer.file_list.get(infoHash);
                             output.writeUTF(Integer.toString(pieceMap.size()));
-                            for (Map.Entry<Integer, ArrayList<String>> entry : pieceMap.entrySet()){
-                                if (entry.getValue().size()==0) {
+
+                            ///////////////////////////////////////////////////////////////////////////
+                            /// RAREST STAGEDY ////
+                            ///////////////////////////////////////////////////////////////////////////
+                            // Convert map entries to a list for sorting
+                            List<Map.Entry<Integer, ArrayList<String>>> entryList = new ArrayList<>(pieceMap.entrySet());
+                            // Sort the entries by the size of the ArrayList in ascending order
+                            entryList.sort(Comparator.comparingInt(entry -> entry.getValue().size()));
+                            for (Map.Entry<Integer, ArrayList<String>> entry : entryList) {
+                                if (entry.getValue().size() == 0) {
                                     check = true;
                                     output.writeUTF("File not found on the server.");
                                     break;
                                 }
                                 String str = Integer.toString(entry.getKey());
-                                //str = str + ";" + entry.getValue().get(0) + ";" + MyServer.BASE_PATH + entry.getValue().get(0).split(":")[1]; //Integer.toString(clientPort);
                                 str = str + ";" + entry.getValue().get(0) + ";" + MyServer.BASE_PATH + entry.getValue().get(0).split(":")[1] + ";" + infoHash;
                                 output.writeUTF(str);
                             }
+                            ///////////////////////////////////////////////////////////////////////////
+                            // for (Map.Entry<Integer, ArrayList<String>> entry : pieceMap.entrySet()){
+                            //     if (entry.getValue().size()==0) {
+                            //         check = true;
+                            //         output.writeUTF("File not found on the server.");
+                            //         break;
+                            //     }
+                            //     String str = Integer.toString(entry.getKey());
+                            //     //str = str + ";" + entry.getValue().get(0) + ";" + MyServer.BASE_PATH + entry.getValue().get(0).split(":")[1]; //Integer.toString(clientPort);
+                            //     str = str + ";" + entry.getValue().get(0) + ";" + MyServer.BASE_PATH + entry.getValue().get(0).split(":")[1] + ";" + infoHash;
+                            //     output.writeUTF(str);
+                            // }
                             if (check!=true) 
                             output.writeUTF("DONE");
                             //System.out.println("Sent piece-to-peer mapping for file with info_hash: " + infoHash);
@@ -345,28 +373,44 @@ class ClientHandler implements Runnable {
 
     private void cleanup2() {
         try {
-            
+            // Iterator over file_list2
             Iterator<Map.Entry<String, HashMap<String, HashMap<Integer, ArrayList<String>>>>> bigIterator = MyServer.file_list2.entrySet().iterator();
-        while (bigIterator.hasNext()) {
-            Map.Entry<String, HashMap<String, HashMap<Integer, ArrayList<String>>>> bigEntry = bigIterator.next();
-            HashMap<String, HashMap<Integer, ArrayList<String>>> fileMap = bigEntry.getValue();
-            Iterator<Map.Entry<String, HashMap<Integer, ArrayList<String>>>> fileIterator = fileMap.entrySet().iterator();
-            while (fileIterator.hasNext()) {
-                Map.Entry<String, HashMap<Integer, ArrayList<String>>> fileEntry = fileIterator.next();
-                HashMap<Integer, ArrayList<String>> pieceMap = fileEntry.getValue();
-                    for (ArrayList<String> clients : pieceMap.values()) {
-                        clients.remove(socket.getInetAddress().getHostAddress() + ":" + clientPort);
+            while (bigIterator.hasNext()) {
+                Map.Entry<String, HashMap<String, HashMap<Integer, ArrayList<String>>>> bigEntry = bigIterator.next();
+                HashMap<String, HashMap<Integer, ArrayList<String>>> fileMap = bigEntry.getValue();
+    
+                Iterator<Map.Entry<String, HashMap<Integer, ArrayList<String>>>> fileIterator = fileMap.entrySet().iterator();
+                while (fileIterator.hasNext()) {
+                    Map.Entry<String, HashMap<Integer, ArrayList<String>>> fileEntry = fileIterator.next();
+                    HashMap<Integer, ArrayList<String>> pieceMap = fileEntry.getValue();
+    
+                    // Remove the client from all pieces
+                    pieceMap.values().forEach(clients ->
+                            clients.remove(socket.getInetAddress().getHostAddress() + ":" + clientPort));
+    
+                    // Check if all pieces are now empty
+                    boolean allPiecesEmpty = pieceMap.values().stream().allMatch(List::isEmpty);
+    
+                    // If all pieces are empty, remove the file's key
+                    if (allPiecesEmpty) {
+                        fileIterator.remove(); // Remove this file entry from fileMap
                     }
                 }
+    
+                // If the fileMap is now empty, remove the big key from file_list2
+                if (fileMap.isEmpty()) {
+                    bigIterator.remove();
+                }
             }
-            
+    
+            // Close the socket if not already closed
             if (!socket.isClosed()) {
                 socket.close();
             }
             System.out.println("Client " + clientPort + " handler cleaned up");
-        }    
-        catch (IOException e) {
+        } catch (IOException e) {
             System.out.println("Error during cleanup for client " + clientPort + ": " + e.getMessage());
         }
     }
+    
 }
