@@ -159,7 +159,7 @@ public class MetaInfo {
         }
         try (FileOutputStream fos = new FileOutputStream(filePath)) {
             String encodedData = encode();
-            fos.write(encodedData.getBytes("UTF-8"));
+            fos.write(encodedData.getBytes("ISO-8859-1"));
         }
     }
 
@@ -167,7 +167,7 @@ public class MetaInfo {
         try (FileInputStream fis = new FileInputStream(filePath)) {
             byte[] data = new byte[fis.available()];
             fis.read(data);
-            String bencodedData = new String(data, "UTF-8");
+            String bencodedData = new String(data, "ISO-8859-1");
             return decode(bencodedData);
         }
     }
