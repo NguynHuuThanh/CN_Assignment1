@@ -4,6 +4,7 @@ import java.util.*;
 
 public class MyClient{
   public static int clientPort;
+  public static boolean choke;
   public static void main(String[] args){
       
 
@@ -41,6 +42,8 @@ public class MyClient{
 
       ServerSocket clientSS = new ServerSocket(clientPort);
 
+      choke = false;
+
       new Thread(new Menu(socket, output, input)).start();
       new Thread(new Hankshake(clientSS)).start();
 
@@ -74,12 +77,15 @@ class Menu implements Runnable {
   public void run() {
     Scanner scanner = new Scanner(System.in);
     boolean running = true;
+    boolean interested = false;
 
     while (running) {
         System.out.println("\nChoose operation:");
         System.out.println("[1] Print file.");
         System.out.println("[2] Download file.");
         System.out.println("[3] Exit");
+        //System.out.println("[4] Choke other peers.");
+        //System.out.println("[5] Unchoke other peers.");
 
         int choice = scanner.nextInt();
         scanner.nextLine(); // Consume the newline
@@ -97,6 +103,7 @@ class Menu implements Runnable {
                 break;
 
                 case 2:
+                interested = true ;
               PrintStream originalOut = System.out; // Save the original System.out
               PrintStream originalErr = System.err; // Save the original System.err
               try {
@@ -124,6 +131,7 @@ class Menu implements Runnable {
 
                   if (tmp.contains("File not found on the server.")) {
                       System.out.println("File not found on the server.");
+                      interested = false;
                       break;
                   }
 
@@ -142,7 +150,8 @@ class Menu implements Runnable {
 
                       if (tmp.contains("DONE")) {
                           if (check) {
-                              System.out.println("All pieces received.");
+                              //System.out.println("All pieces received.");
+                              System.out.println("Done the process.");
                           }
                           break;
                       }
@@ -155,6 +164,7 @@ class Menu implements Runnable {
                       if (Integer.valueOf(peerIP.split(":")[1]) == MyClient.clientPort) {
                           System.out.println("You already have this file!");
                           check = true;
+                          interested = false;
                           break;
                       }
 
@@ -193,6 +203,7 @@ class Menu implements Runnable {
                   // Log restoration
                   System.out.println("Logging ended. Output restored to console.");
               }
+              interested = false;
               break;
 
             
@@ -212,6 +223,14 @@ class Menu implements Runnable {
                 System.exit(0);
                 break;
 
+                // case 4:
+                // MyClient.choke = true;
+                // break;
+
+                // case 5:
+                // MyClient.choke = false;
+                // break;
+
             default:
                 System.out.println("Invalid choice. Please try again.");
         }
@@ -227,7 +246,12 @@ class Menu implements Runnable {
         // Send handshake and piece request
         out.writeUTF("Handshake sent from " + this.socket.getInetAddress() + ":" + this.socket.getLocalPort());
         System.out.println("Handshake sent from " + this.socket.getInetAddress() + ":" + this.socket.getLocalPort());
-        System.out.println(in.readUTF());
+        String temp = in.readUTF();
+        System.out.println(temp);
+        if (temp.contains("deny connecting!")){
+          System.out.println("Cancel the download process!");
+          return false;
+        }
         out.writeUTF(downloadDirectory + "/" + nameFile); // File name/path
         out.writeUTF(String.valueOf(pieceIndex));            // Requested piece index
 
@@ -286,22 +310,77 @@ private void reassembleFile(String outputFile, byte[][] buffer_pieces) {
 
 class Hankshake implements Runnable {
   private ServerSocket socket;
+  //private boolean choke;
   //private String peerID;
   public Hankshake(ServerSocket socket){
     this.socket=socket;
+    //this.choke = choke;
   }
   @Override
   public void run() {
     Scanner scanner = new Scanner(System.in);
-    boolean running = true;
+    //boolean unchoke = choke;
+    PrintStream originalOut = System.out; // Save the original System.out
+    PrintStream originalErr = System.err; // Save the original System.err
+    
+    while (true){
 
-    while (true) {
+    while (MyClient.choke == true){
       try (Socket client = this.socket.accept();
            DataInputStream input = new DataInputStream(client.getInputStream());
            DataOutputStream output = new DataOutputStream(client.getOutputStream());
            OutputStream outputStream = client.getOutputStream()) {
 
-          System.out.println(input.readUTF());
+            //System.out.println("Logging started at: " + new Date());
+            FileOutputStream fileOutputStream = new FileOutputStream(Integer.toString(MyClient.clientPort) + ".log", true);
+            PrintStream logStream = new PrintStream(fileOutputStream);
+            System.setOut(logStream);
+            System.setErr(logStream);
+
+            String handshake = input.readUTF();
+            System.out.println(handshake);
+            if (!handshake.contains("Handshake sent from ")){
+              System.setOut(logStream);
+              System.setErr(logStream);
+              client.close();
+            }
+            output.writeUTF("Peer " + this.socket.getInetAddress().getHostAddress() + ":" + this.socket.getLocalPort() + " deny connecting!");
+            //String path = input.readUTF();
+            //int pieceIndex = Integer.parseInt(input.readUTF());
+          
+      } catch (IOException e) {
+          //System.out.println("Error handling client: " + e.getMessage());
+      }
+      finally {
+        // Restore the original System.out and System.err
+        System.setOut(originalOut);
+        System.setErr(originalErr);
+
+        // Log restoration
+        //System.out.println("Logging ended. Output restored to console.");
+    }
+    }
+
+    while (MyClient.choke == false) {
+      try (Socket client = this.socket.accept();
+           DataInputStream input = new DataInputStream(client.getInputStream());
+           DataOutputStream output = new DataOutputStream(client.getOutputStream());
+           OutputStream outputStream = client.getOutputStream()) {
+
+            //System.out.println("Logging started at: " + new Date());
+            FileOutputStream fileOutputStream = new FileOutputStream(Integer.toString(MyClient.clientPort) + ".log", true);
+            PrintStream logStream = new PrintStream(fileOutputStream);
+            System.setOut(logStream);
+            System.setErr(logStream);
+
+          String handshake = input.readUTF();
+          System.out.println(handshake);
+          // if (!handshake.contains("Handshake sent from ")){
+          //   //continue;
+          //   System.setOut(logStream);
+          //   System.setErr(logStream);
+          //   client.close();
+          // }
           output.writeUTF("Peer " + this.socket.getInetAddress().getHostAddress() + ":" + this.socket.getLocalPort() + " received!");
           String path = input.readUTF();
           int pieceIndex = Integer.parseInt(input.readUTF());
@@ -327,8 +406,17 @@ class Hankshake implements Runnable {
       } catch (IOException e) {
           //System.out.println("Error handling client: " + e.getMessage());
       }
+      finally {
+        // Restore the original System.out and System.err
+        System.setOut(originalOut);
+        System.setErr(originalErr);
+
+        // Log restoration
+        //System.out.println("Logging ended. Output restored to console.");
     }
     }
+    }
+  }
   }
 
   
